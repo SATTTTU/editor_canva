@@ -1,0 +1,70 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum LayerType {
+  IMAGE
+}
+
+model Asset {
+  id           String   @id @default(cuid())
+  originalName String
+  mimeType     String
+  width        Int?
+  height       Int?
+  sizeBytes    Int?
+  url          String   // This will be the file path, e.g., /uploads/image.png
+  sha256       String?
+  createdAt    DateTime @default(now())
+  layers       Layer[]
+}
+
+model Design {
+  id        String   @id @default(cuid())
+  title     String
+  width     Int      // Canvas width
+  height    Int      // Canvas height
+  thumbnail String?  // Optional: Could store a base64 or URL to a small preview
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  layers    Layer[]
+}
+
+model Layer {
+  id        String   @id @default(cuid())
+  type      LayerType
+  design    Design   @relation(fields: [designId], references: [id], onDelete: Cascade)
+  designId  String
+  asset     Asset?   @relation(fields: [assetId], references: [id])
+  assetId   String?
+
+  // Transform state in the editor's coordinate space
+  x         Float    @default(0)
+  y         Float    @default(0)
+  width     Float
+  height    Float
+  rotation  Float    @default(0)
+  flipX     Boolean  @default(false)
+  flipY     Boolean  @default(false)
+  opacity   Float    @default(1)
+  zIndex    Int      @default(0)
+
+  // Optional crop rectangle in the layer's local coordinates
+  cropX     Float?
+  cropY     Float?
+  cropW     Float?
+  cropH     Float?
+
+  // Metadata
+  visible   Boolean  @default(true)
+  locked    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
