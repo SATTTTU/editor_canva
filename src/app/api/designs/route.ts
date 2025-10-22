@@ -3,7 +3,16 @@ import prisma from "../../../lib/prisma";
 
 export async function GET() {
   try {
-    const designs = await prisma.design.findMany({ orderBy: { createdAt: "desc" } });
+    // Include layers (and their asset relation) so the UI can preview layers for each design
+    const designs = await prisma.design.findMany({
+      orderBy: { createdAt: "desc" },
+      include: {
+        layers: {
+          include: { asset: true },
+          orderBy: { zIndex: 'asc' },
+        },
+      },
+    });
     return NextResponse.json(designs);
   } catch (err) {
     return NextResponse.json({ error: "Failed to fetch designs" }, { status: 500 });
@@ -13,6 +22,17 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const { title, width, height, thumbnail, layers } = await req.json();
+
+    // Log thumbnail presence/size for debugging large payloads
+    if (thumbnail) {
+      try {
+        const len = typeof thumbnail === 'string' ? thumbnail.length : 0
+        console.log(`designs.POST: received thumbnail length=${len}`)
+      } catch (e) {
+        console.log('designs.POST: received thumbnail (unable to compute length)')
+      }
+    }
+
     const design = await prisma.design.create({ data: { title, width, height, thumbnail } });
 
     // Create layers referencing the new design
@@ -43,7 +63,15 @@ export async function POST(req: Request) {
       await Promise.all(createPromises);
     }
 
-    return NextResponse.json(design, { status: 201 });
+    // Fetch the full created design with layers + asset relation so the response includes everything the UI expects
+    const full = await prisma.design.findUnique({
+      where: { id: design.id },
+      include: {
+        layers: { include: { asset: true }, orderBy: { zIndex: 'asc' } },
+      },
+    });
+
+    return NextResponse.json(full ?? design, { status: 201 });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Failed to create design" }, { status: 500 });

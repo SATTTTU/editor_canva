@@ -2,9 +2,9 @@
 
 import type React from "react"
 import { useRef, useState } from "react"
-import { useDispatch } from "react-redux"
+import { useDispatch, useSelector } from "react-redux"
 import { X, Upload } from "lucide-react"
-import { AppDispatch } from "@/lib/store/store"
+import { AppDispatch, RootState } from "@/lib/store/store"
 import { addLayer } from "@/lib/store/editorSlice"
 import Button from "../ui/Button"
 
@@ -16,6 +16,7 @@ export function AssetGallery({ onClose }: AssetGalleryProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [assets, setAssets] = useState<Array<{ id: string; src: string }>>([])
   const dispatch = useDispatch<AppDispatch>()
+  const { baseImage, selectedLayerId, designId } = useSelector((state: RootState) => state.editor)
 
   const handleAssetUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -43,39 +44,62 @@ export function AssetGallery({ onClose }: AssetGalleryProps) {
     const img = new window.Image()
     img.onload = async () => {
       try {
-        const payload = {
-          type: 'IMAGE',
-          designId: null,
+        // Prefer persisted designId from store; as a fallback use baseImage.id when it
+        // appears to be a persisted id. If we don't have a persisted design id, avoid
+        // calling the API (which would violate FK constraints) and create a local-only
+        // layer instead.
+        const designIdToUse = designId ?? (baseImage as any)?.designId ?? undefined;
+
+        const localLayer = {
+          id: `layer-${Date.now()}`,
+          name: `Asset ${assets.length + 1}`,
+          src: asset.src,
           assetId: asset.id,
+          asset: { id: asset.id, url: asset.src },
           x: 50,
           y: 50,
           width: Math.min(img.width, 200),
           height: Math.min(img.height, 200),
           rotation: 0,
-          flipX: false,
-          flipY: false,
-          opacity: 1,
-          zIndex: 0,
+          flipped: false,
           visible: true,
-          locked: false,
-        }
-        const res = await fetch('/api/layers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-        if (res.ok) {
-          const created = await res.json()
-          dispatch(addLayer(created as any))
+        } as any;
+
+        // If we don't have a persisted designId, create a local-only layer and
+        // avoid calling the server which would return a FK error.
+        if (!designIdToUse) {
+          // No persisted design available — create local-only layer
+          dispatch(addLayer(localLayer));
         } else {
-          // fallback to local-only layer
-          dispatch(addLayer({
-            id: `layer-${Date.now()}`,
-            name: `Asset ${assets.length + 1}`,
-            src: asset.src,
-            x: 50, y: 50,
+          const payload = {
+            type: 'IMAGE',
+            designId: designIdToUse,
+            assetId: asset.id,
+            x: 50,
+            y: 50,
             width: Math.min(img.width, 200),
             height: Math.min(img.height, 200),
             rotation: 0,
-            flipped: false,
+            flipX: false,
+            flipY: false,
+            opacity: 1,
+            zIndex: 0,
             visible: true,
-          } as any))
+            locked: false,
+          }
+
+          try {
+            const res = await fetch('/api/layers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+            if (res.ok) {
+              const created = await res.json()
+              dispatch(addLayer(created as any))
+            } else {
+              // fallback to local-only layer
+              dispatch(addLayer(localLayer))
+            }
+          } catch (err) {
+            dispatch(addLayer(localLayer))
+          }
         }
       } catch (err) {
         dispatch(addLayer({

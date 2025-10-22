@@ -17,7 +17,8 @@ export async function POST(req: Request) {
     // Basic validation: these fields are required by the Prisma model
     const required = ["type", "designId", "width", "height"];
     for (const key of required) {
-      if (body[key] === undefined) {
+      // treat `undefined` or `null` as missing — clients sometimes send null for optional ids
+      if (body[key] === undefined || body[key] === null) {
         return NextResponse.json({ error: `Missing required field: ${key}` }, { status: 400 });
       }
     }
@@ -47,6 +48,8 @@ export async function POST(req: Request) {
     const layer = await prisma.layer.create({ data });
     return NextResponse.json(layer, { status: 201 });
   } catch (err) {
+    // Log the error server-side for easier debugging during development
+    console.error('layers.POST error:', err);
     return NextResponse.json({ error: "Failed to create layer" }, { status: 500 });
   }
 }

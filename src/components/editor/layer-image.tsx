@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { Image as KonvaImage, Transformer } from "react-konva";
 import Konva from "konva";
 import { KonvaEventObject } from 'konva/lib/Node';
+import type { Layer as AppLayer } from '@/lib/types';
+import { Rect, Text } from 'react-konva';
 
 // Enhanced image loader hook with error handling and loading state
 function useHTMLImage(src: string | undefined | null) {
@@ -35,7 +37,7 @@ function useHTMLImage(src: string | undefined | null) {
     };
 
     const onError = (e: ErrorEvent) => {
-      console.error('Image load error:', e);
+      console.error('Image load error for URL', src, e);
       setError('Failed to load image');
       setIsLoading(false);
       setImg(null);
@@ -46,6 +48,7 @@ function useHTMLImage(src: string | undefined | null) {
 
     // Set src after attaching event listeners
     try {
+      console.debug('Attempting to load image URL:', src)
       if (src.startsWith('http') || src.startsWith('https')) {
         i.src = src;
       } else if (src.startsWith('data:') || src.startsWith('blob:')) {
@@ -56,7 +59,7 @@ function useHTMLImage(src: string | undefined | null) {
         i.src = absoluteUrl.toString();
       }
     } catch (err) {
-      console.error('Invalid URL:', err);
+      console.error('Invalid URL:', src, err);
       setError('Invalid image URL');
       setIsLoading(false);
     }
@@ -73,19 +76,15 @@ function useHTMLImage(src: string | undefined | null) {
   return [img, isLoading, error] as const;
 }
 
-// Layer type definition
-interface LayerType {
-  id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  rotation: number;
-  flipX: boolean;
-  flipY: boolean;
-  asset?: { url: string };
-  src?: string;
-}
+// Layer type definition (exported so other modules import a single canonical type)
+// Re-export a LayerType that's compatible with the app's Layer type
+export type LayerType = AppLayer & {
+  // optional fields used by the editor UI
+  flipX?: boolean;
+  flipY?: boolean;
+  asset?: { url: string } | null;
+  src?: string | null;
+};
 
 // Component props interface
 interface LayerImageProps {
@@ -130,7 +129,7 @@ export function LayerImage({ layer, isSelected, onSelect, onChange, cropMode }: 
 
   return (
     <>
-      {img && (
+      {img ? (
         <KonvaImage
           image={img}
           x={layer.x}
@@ -163,24 +162,60 @@ export function LayerImage({ layer, isSelected, onSelect, onChange, cropMode }: 
             if (!node) return;
 
             try {
-              const scaleX = Math.abs(node.scaleX());
-              const scaleY = Math.abs(node.scaleY());
+              // node.scaleX/Y includes both flip and transform scale. Use sign to detect final flip state
+              const rawScaleX = node.scaleX();
+              const rawScaleY = node.scaleY();
+              const absScaleX = Math.abs(rawScaleX);
+              const absScaleY = Math.abs(rawScaleY);
 
+              // Determine final flip state: if the resulting scale is negative, it's flipped
+              const newFlipX = rawScaleX < 0;
+              const newFlipY = rawScaleY < 0;
+
+              // Reset visual scale to 1 to keep the node's width/height as the source of truth
               node.scaleX(1);
               node.scaleY(1);
 
               onChange({
                 x: Math.round(node.x()),
                 y: Math.round(node.y()),
-                width: Math.max(5, Math.round(node.width() * scaleX)),
-                height: Math.max(5, Math.round(node.height() * scaleY)),
-                rotation: node.rotation()
+                width: Math.max(5, Math.round(node.width() * absScaleX)),
+                height: Math.max(5, Math.round(node.height() * absScaleY)),
+                rotation: node.rotation(),
+                flipX: newFlipX,
+                flipY: newFlipY,
               });
             } catch (error) {
               console.error('Transform error:', error);
             }
           }}
         />
+      ) : (
+        // Placeholder box when no image available
+        <>
+          <Rect
+            x={layer.x}
+            y={layer.y}
+            width={layer.width}
+            height={layer.height}
+            fill="#f3f4f6"
+            stroke="#e5e7eb"
+            strokeWidth={1}
+            onClick={onSelect}
+            onTap={onSelect}
+            draggable={!cropMode}
+            ref={shapeRef}
+            shadowEnabled={isSelected}
+            shadowBlur={10}
+            shadowColor="rgba(0,0,0,0.2)"
+            shadowOffset={{ x: 0, y: 2 }}
+            onDragEnd={(e: KonvaEventObject<DragEvent>) => {
+              const target = e.target as Konva.Rect;
+              onChange({ x: Math.round(target.x()), y: Math.round(target.y()) })
+            }}
+          />
+          <Text text={"No image"} x={layer.x + 8} y={layer.y + 8} fontSize={12} fill="#9ca3af" />
+        </>
       )}
       {isSelected && !cropMode && (
         <Transformer

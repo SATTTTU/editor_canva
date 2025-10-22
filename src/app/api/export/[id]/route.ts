@@ -1,19 +1,16 @@
+// app/api/export/[id]/route.ts
 import { NextResponse } from 'next/server';
 import sharp from 'sharp';
 import prisma from '@/lib/prisma';
 import path from 'path';
-import { getAssetPath } from '@/lib/image';
 
-export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
-    // Get design and its layers
     const design = await prisma.design.findUnique({
       where: { id: params.id },
       include: {
         layers: {
+          where: { visible: true },
           include: { asset: true },
           orderBy: { zIndex: 'asc' },
         },
@@ -24,78 +21,56 @@ export async function GET(
       return new NextResponse('Design not found', { status: 404 });
     }
 
-    // Create a base canvas with the design dimensions
-    let composition = sharp({
-      create: {
-        width: design.width,
-        height: design.height,
-        channels: 4,
-        background: { r: 255, g: 255, b: 255, alpha: 0 },
-      },
-    });
+    const compositeLayers = await Promise.all(design.layers.map(async (layer) => {
+      if (!layer.asset?.url) return null;
 
-    // Process each layer
-    for (const layer of design.layers) {
-      if (!layer.visible || !layer.asset) continue;
+      const assetPath = path.join(process.cwd(), 'public', layer.asset.url);
+      let layerImage = sharp(assetPath);
 
-      // Read the layer's image
-      const imagePath = getAssetPath(layer.asset.url);
-      let layerImage = sharp(imagePath);
-
-      // Apply transformations
-      // Resize
-      layerImage = layerImage.resize(
-        Math.round(layer.width),
-        Math.round(layer.height),
-        { fit: 'fill' }
-      );
-
-      // Apply crop if specified
-      if (layer.cropX !== null && layer.cropY !== null && 
-          layer.cropW !== null && layer.cropH !== null) {
-        layerImage = layerImage.extract({
-          left: Math.round(layer.cropX),
-          top: Math.round(layer.cropY),
+      // Apply transformations in order
+      if (layer.cropW && layer.cropH) {
+        layerImage.extract({
+          left: Math.round(layer.cropX ?? 0),
+          top: Math.round(layer.cropY ?? 0),
           width: Math.round(layer.cropW),
           height: Math.round(layer.cropH),
         });
       }
+      layerImage.resize(Math.round(layer.width), Math.round(layer.height));
+      if (layer.flipY) layerImage.flip();
+      if (layer.flipX) layerImage.flop();
+      if (layer.rotation) layerImage.rotate(layer.rotation, { background: { r: 0, g: 0, b: 0, alpha: 0 } });
 
-      // Apply flip
-      if (layer.flipX || layer.flipY) {
-        layerImage = layerImage.flip(layer.flipY).flop(layer.flipX);
-      }
+      return {
+        input: await layerImage.toBuffer(),
+        top: Math.round(layer.y),
+        left: Math.round(layer.x),
+      };
+    }));
 
-      // Apply rotation
-      if (layer.rotation !== 0) {
-        layerImage = layerImage.rotate(layer.rotation);
-      }
+    const validLayers = compositeLayers.filter(Boolean) as sharp.OverlayOptions[];
 
-      // Convert to PNG buffer
-      const layerBuffer = await layerImage.toBuffer();
+    const finalImageBuffer = await sharp({
+      create: {
+        width: design.width,
+        height: design.height,
+        channels: 4,
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      },
+    })
+    .composite(validLayers)
+    .png()
+    .toBuffer();
 
-      // Composite the layer onto the base canvas
-      composition = composition.composite([
-        {
-          input: layerBuffer,
-          top: Math.round(layer.y),
-          left: Math.round(layer.x),
-        },
-      ]);
-    }
-
-    // Generate final image
-    const outputBuffer = await composition.png().toBuffer();
-    
-    // Return the image with appropriate headers
-    return new NextResponse(Buffer.from(outputBuffer), {
+    return new NextResponse(finalImageBuffer, {
+      status: 200,
       headers: {
         'Content-Type': 'image/png',
         'Content-Disposition': `attachment; filename="design-${design.id}.png"`,
       },
     });
   } catch (error) {
-    console.error('Export error:', error);
-    return new NextResponse('Export failed', { status: 500 });
+    console.error('Export Error:', error);
+    return new NextResponse('Failed to export design', { status: 500 });
   }
 }
