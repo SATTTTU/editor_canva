@@ -1,24 +1,29 @@
 import { NextResponse } from "next/server";
 import prisma from "../../../../lib/prisma";
 
-export async function GET(req: Request, context: any) {
+type RouteContext = { params?: Record<string, string> } | { params?: Promise<Record<string, string> | undefined> };
+
+export async function GET(req: Request, context: RouteContext) {
   const params = await context?.params;
   try {
-    const layer = await prisma.layer.findUnique({ where: { id: params.id }, include: { asset: true } });
+    const id = params?.id as string;
+    const layer = await prisma.layer.findUnique({ where: { id }, include: { asset: true } });
     if (!layer) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json(layer);
-  } catch (err) {
+  } catch (err: unknown) {
+    console.error('layers/[id].GET error:', err);
     return NextResponse.json({ error: "Failed to fetch layer" }, { status: 500 });
   }
 }
 
-export async function PUT(req: Request, context: any) {
+export async function PUT(req: Request, context: RouteContext) {
   const params = await context?.params;
   try {
-    const body = await req.json();
+    const id = params?.id as string;
+    const body = (await req.json()) as Record<string, unknown>;
 
     // Only allow updating known fields
-    const allowed: any = {};
+    const updates: Record<string, unknown> = {};
     const updatable = [
       "x",
       "y",
@@ -38,28 +43,33 @@ export async function PUT(req: Request, context: any) {
       "assetId",
     ];
     for (const k of updatable) {
-      if (body[k] !== undefined) allowed[k] = body[k];
+      if (Object.prototype.hasOwnProperty.call(body, k)) updates[k] = body[k];
     }
 
-    const updated = await prisma.layer.update({ where: { id: params.id }, data: allowed });
+    const updated = await prisma.layer.update({ where: { id }, data: updates as any });
     return NextResponse.json(updated);
-  } catch (err: any) {
-    if (err?.code === "P2025") {
+  } catch (err: unknown) {
+    const e = err as any;
+    if (e?.code === "P2025") {
       return NextResponse.json({ error: "Layer not found" }, { status: 404 });
     }
+    console.error('layers/[id].PUT error:', err);
     return NextResponse.json({ error: "Failed to update layer" }, { status: 500 });
   }
 }
 
-export async function DELETE(req: Request, context: any) {
+export async function DELETE(req: Request, context: RouteContext) {
   const params = await context?.params;
   try {
-    await prisma.layer.delete({ where: { id: params.id } });
+    const id = params?.id as string;
+    await prisma.layer.delete({ where: { id } });
     return NextResponse.json({ message: "Deleted" });
-  } catch (err: any) {
-    if (err?.code === "P2025") {
+  } catch (err: unknown) {
+    const e = err as any;
+    if (e?.code === "P2025") {
       return NextResponse.json({ error: "Layer not found" }, { status: 404 });
     }
+    console.error('layers/[id].DELETE error:', err);
     return NextResponse.json({ error: "Failed to delete layer" }, { status: 500 });
   }
 }

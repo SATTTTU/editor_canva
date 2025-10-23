@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import prisma from "../../../lib/prisma";
 
+type RouteContext = { params?: Promise<Record<string,string>> | Record<string,string> };
+
 export async function GET() {
   try {
     // Include layers (and their asset relation) so the UI can preview layers for each design
@@ -21,7 +23,8 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const { title, width, height, thumbnail, layers } = await req.json();
+    const body = await req.json();
+    const { title, width, height, thumbnail, layers } = body as { title?: string; width?: number; height?: number; thumbnail?: string | null; layers?: unknown };
 
     // Log thumbnail presence/size for debugging large payloads
     if (thumbnail) {
@@ -33,30 +36,35 @@ export async function POST(req: Request) {
       }
     }
 
+    if (!title || typeof width !== 'number' || typeof height !== 'number') {
+      return NextResponse.json({ error: 'Missing required fields: title, width, height' }, { status: 400 });
+    }
+
     const design = await prisma.design.create({ data: { title, width, height, thumbnail } });
 
     // Create layers referencing the new design
     if (Array.isArray(layers)) {
-      const createPromises = layers.map((l: any) => {
+      const createPromises = layers.map((l: unknown) => {
+        const ll = l as Record<string, unknown>;
         const data: any = {
-          type: l.type,
+          type: (ll['type'] as string) ?? 'IMAGE',
           designId: design.id,
-          assetId: l.assetId ?? null,
-          x: l.x ?? 0,
-          y: l.y ?? 0,
-          width: l.width,
-          height: l.height,
-          rotation: l.rotation ?? 0,
-          flipX: l.flipX ?? false,
-          flipY: l.flipY ?? false,
-          opacity: l.opacity ?? 1,
-          zIndex: l.zIndex ?? 0,
-          cropX: l.cropX ?? null,
-          cropY: l.cropY ?? null,
-          cropW: l.cropW ?? null,
-          cropH: l.cropH ?? null,
-          visible: l.visible ?? true,
-          locked: l.locked ?? false,
+          assetId: (ll['assetId'] as string) ?? null,
+          x: (ll['x'] as number) ?? 0,
+          y: (ll['y'] as number) ?? 0,
+          width: ll['width'] as number,
+          height: ll['height'] as number,
+          rotation: (ll['rotation'] as number) ?? 0,
+          flipX: (ll['flipX'] as boolean) ?? false,
+          flipY: (ll['flipY'] as boolean) ?? false,
+          opacity: (ll['opacity'] as number) ?? 1,
+          zIndex: (ll['zIndex'] as number) ?? 0,
+          cropX: (ll['cropX'] as number) ?? null,
+          cropY: (ll['cropY'] as number) ?? null,
+          cropW: (ll['cropW'] as number) ?? null,
+          cropH: (ll['cropH'] as number) ?? null,
+          visible: (ll['visible'] as boolean) ?? true,
+          locked: (ll['locked'] as boolean) ?? false,
         };
         return prisma.layer.create({ data });
       });
@@ -72,7 +80,7 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json(full ?? design, { status: 201 });
-  } catch (err) {
+  } catch (err: unknown) {
     console.error(err);
     return NextResponse.json({ error: "Failed to create design" }, { status: 500 });
   }

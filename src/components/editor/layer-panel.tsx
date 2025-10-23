@@ -4,13 +4,14 @@ import { useState } from "react"
 import { useSelector, useDispatch } from "react-redux"
 import { Eye, EyeOff, Trash2, ChevronUp, ChevronDown, Copy, Edit2 } from "lucide-react"
 import { AppDispatch, RootState } from "@/lib/store/store"
-import { 
-  setSelectedLayer, 
-  updateLayer, 
-  deleteLayer, 
+import {
+  setSelectedLayer,
+  updateLayer,
+  deleteLayer,
   addLayer,
-  reorderLayer // Ensure this action exists in your editorSlice
-} from "@/lib/store/editorSlice"
+  duplicateLayer,
+  reorderLayer, // Ensure this action exists in your editorSlice
+} from "@/lib/store/editorSlice";
 import useLayers from "@/hooks/useLayers"
 import Button from "../ui/Button"
 
@@ -109,7 +110,7 @@ export function LayerPanel() {
         ) : (
           uniqueDisplayLayers.map((layer) => {
             const isBaseImage = layer.id === baseImage?.id;
-            const displayName = layer.name || (isBaseImage ? "Base Image" : `Layer ${layer.zIndex}`);
+            const displayName = (layer as any).name ?? (isBaseImage ? "Base Image" : `Layer ${((layer as any).zIndex ?? 0)}`);
             
             return (
               <div

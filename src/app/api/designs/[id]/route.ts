@@ -13,13 +13,15 @@ const designUpdateSchema = z.object({
   // You can add other fields you might want to update on the design level
 });
 
+type RouteContext = { params?: Record<string, string> } | { params?: Promise<Record<string, string> | undefined> };
+
 export async function GET(
   request: Request,
-  context: any
+  context: RouteContext
 ) {
   try {
     const params = await context?.params;
-    const { id } = params;
+    const id = params?.id as string;
 
     const design = await prisma.design.findUnique({
       where: { id: id },
@@ -44,11 +46,11 @@ export async function GET(
 
 export async function PATCH(
   request: Request,
-  context: any
+  context: RouteContext
 ) {
   try {
     const params = await context?.params;
-    const { id } = params;
+    const id = params?.id as string;
     const json = await request.json();
     
     // Validate the incoming data
@@ -80,11 +82,11 @@ export async function PATCH(
 
 export async function DELETE(
   request: Request,
-  context: any
+  context: RouteContext
 ) {
   try {
     const params = await context?.params;
-    const { id } = params;
+    const id = params?.id as string;
 
     // Use a transaction to ensure related layers are deleted before the design
     await prisma.$transaction(async (tx) => {

@@ -43,8 +43,8 @@ export default function useLayers(designId?: string) {
     try {
       const res = await fetch("/api/layers");
       if (!res.ok) throw new Error("Failed to fetch layers");
-      const data = await res.json();
-      const forDesign = designId ? data.filter((d: any) => d.designId === designId) : data;
+      const data = (await res.json()) as LayerDTO[];
+      const forDesign = designId ? data.filter((d) => d.designId === designId) : data;
       setLayers(forDesign);
     } catch (err: any) {
       setError(err.message || "Unknown error");
@@ -64,7 +64,7 @@ export default function useLayers(designId?: string) {
       console.error('createLayer failed', res.status, text);
       throw new Error(`Failed to create layer: ${res.status} ${text}`);
     }
-    const created = JSON.parse(text);
+    const created = JSON.parse(text) as LayerDTO;
     setLayers((prev) => (prev ? [created, ...prev] : [created]));
     return created;
   };
@@ -76,7 +76,7 @@ export default function useLayers(designId?: string) {
       // Apply local-only change by mutating state without calling backend
       setLayers((prev) => prev?.map((l) => (l.id === id ? { ...l, ...payload } as LayerDTO : l)) ?? null)
       // Return a resolved value similar to the API response shape
-      return { id, ...(payload as any) } as LayerDTO
+      return { id, ...(payload as Partial<LayerDTO>) } as LayerDTO
     }
     const res = await fetch(`/api/layers/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     const text = await res.text();
@@ -84,7 +84,7 @@ export default function useLayers(designId?: string) {
       console.error('updateLayer failed', id, res.status, text);
       throw new Error(`Failed to update layer: ${res.status} ${text}`);
     }
-    const updated = JSON.parse(text);
+    const updated = JSON.parse(text) as LayerDTO;
     setLayers((prev) => prev?.map((l) => (l.id === id ? updated : l)) ?? null);
     return updated;
   };

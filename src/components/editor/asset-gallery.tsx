@@ -6,6 +6,7 @@ import { useDispatch, useSelector } from "react-redux"
 import { X, Upload } from "lucide-react"
 import { AppDispatch, RootState } from "@/lib/store/store"
 import { addLayer } from "@/lib/store/editorSlice"
+import type { Layer, AssetRef } from '@/lib/types'
 import Button from "../ui/Button"
 
 interface AssetGalleryProps {
@@ -13,7 +14,7 @@ interface AssetGalleryProps {
 }
 
 export function AssetGallery({ onClose }: AssetGalleryProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [assets, setAssets] = useState<Array<{ id: string; src: string }>>([])
   const dispatch = useDispatch<AppDispatch>()
   const { baseImage, selectedLayerId, designId } = useSelector((state: RootState) => state.editor)
@@ -29,7 +30,8 @@ export function AssetGallery({ onClose }: AssetGalleryProps) {
         const res = await fetch('/api/images', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ originalName: file.name, mimeType: file.type, url: src, width: null, height: null, sizeBytes: file.size }) })
         if (res.ok) {
           const asset = await res.json()
-          setAssets(prev => [...prev, { id: asset.id, src: asset.url }])
+          // asset returned from API should conform to AssetRef-ish shape
+          setAssets(prev => [...prev, { id: asset.id as string, src: asset.url as string }])
         } else {
           setAssets(prev => [...prev, { id: `asset-${Date.now()}`, src }])
         }
@@ -48,22 +50,27 @@ export function AssetGallery({ onClose }: AssetGalleryProps) {
         // appears to be a persisted id. If we don't have a persisted design id, avoid
         // calling the API (which would violate FK constraints) and create a local-only
         // layer instead.
-        const designIdToUse = designId ?? (baseImage as any)?.designId ?? undefined;
+        const designIdToUse = designId ?? (baseImage as Layer | null)?.designId ?? undefined;
 
-        const localLayer = {
+        const localLayer: Layer = {
           id: `layer-${Date.now()}`,
           name: `Asset ${assets.length + 1}`,
-          src: asset.src,
+          type: 'IMAGE',
+          designId: designIdToUse ?? undefined,
           assetId: asset.id,
-          asset: { id: asset.id, url: asset.src },
+          asset: { id: asset.id, url: asset.src, originalName: '', mimeType: '' } as AssetRef,
           x: 50,
           y: 50,
           width: Math.min(img.width, 200),
           height: Math.min(img.height, 200),
           rotation: 0,
+          flipX: false,
+          flipY: false,
           flipped: false,
+          opacity: 1,
+          zIndex: 0,
           visible: true,
-        } as any;
+        };
 
         // If we don't have a persisted designId, create a local-only layer and
         // avoid calling the server which would return a FK error.
@@ -86,13 +93,14 @@ export function AssetGallery({ onClose }: AssetGalleryProps) {
             zIndex: 0,
             visible: true,
             locked: false,
-          }
+          } as const;
 
           try {
             const res = await fetch('/api/layers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
             if (res.ok) {
               const created = await res.json()
-              dispatch(addLayer(created as any))
+              // API created layer should be compatible with Layer; cast safely
+              dispatch(addLayer(created as Layer))
             } else {
               // fallback to local-only layer
               dispatch(addLayer(localLayer))
@@ -102,17 +110,24 @@ export function AssetGallery({ onClose }: AssetGalleryProps) {
           }
         }
       } catch (err) {
-        dispatch(addLayer({
+        // Fallback: create a minimal Layer when something goes wrong
+        const fallbackLayer: Layer = {
           id: `layer-${Date.now()}`,
           name: `Asset ${assets.length + 1}`,
-          src: asset.src,
-          x: 50, y: 50,
+          type: 'IMAGE',
+          x: 50,
+          y: 50,
           width: Math.min(img.width, 200),
           height: Math.min(img.height, 200),
           rotation: 0,
+          flipX: false,
+          flipY: false,
           flipped: false,
+          opacity: 1,
+          zIndex: 0,
           visible: true,
-        } as any))
+        }
+        dispatch(addLayer(fallbackLayer))
       }
       onClose()
     }

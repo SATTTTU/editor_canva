@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import prisma from "../../../lib/prisma";
 
+type RouteContext = { params?: Record<string, string> } | { params?: Promise<Record<string, string> | undefined> };
+
 export async function GET() {
   try {
     const layers = await prisma.layer.findMany({ include: { asset: true } });
@@ -23,26 +25,26 @@ export async function POST(req: Request) {
       }
     }
 
-    // Build create data with sensible defaults for optional fields
-    const data: any = {
-      type: body.type,
-      designId: body.designId,
+    // Build create data using the Prisma Layer model fields (ensure required fields)
+    const data = {
+      type: body.type as 'IMAGE',
+      designId: String(body.designId),
       assetId: body.assetId ?? null,
-      x: body.x ?? 0,
-      y: body.y ?? 0,
-      width: body.width,
-      height: body.height,
-      rotation: body.rotation ?? 0,
-      flipX: body.flipX ?? false,
-      flipY: body.flipY ?? false,
-      opacity: body.opacity ?? 1,
-      zIndex: body.zIndex ?? 0,
-      cropX: body.cropX ?? null,
-      cropY: body.cropY ?? null,
-      cropW: body.cropW ?? null,
-      cropH: body.cropH ?? null,
-      visible: body.visible ?? true,
-      locked: body.locked ?? false,
+      x: typeof body.x === 'number' ? body.x : Number(body.x ?? 0),
+      y: typeof body.y === 'number' ? body.y : Number(body.y ?? 0),
+      width: typeof body.width === 'number' ? body.width : Number(body.width),
+      height: typeof body.height === 'number' ? body.height : Number(body.height),
+      rotation: typeof body.rotation === 'number' ? body.rotation : Number(body.rotation ?? 0),
+      flipX: Boolean(body.flipX ?? false),
+      flipY: Boolean(body.flipY ?? false),
+      opacity: typeof body.opacity === 'number' ? body.opacity : Number(body.opacity ?? 1),
+      zIndex: typeof body.zIndex === 'number' ? body.zIndex : Number(body.zIndex ?? 0),
+      cropX: body.cropX == null ? null : Number(body.cropX),
+      cropY: body.cropY == null ? null : Number(body.cropY),
+      cropW: body.cropW == null ? null : Number(body.cropW),
+      cropH: body.cropH == null ? null : Number(body.cropH),
+      visible: Boolean(body.visible ?? true),
+      locked: Boolean(body.locked ?? false),
     };
 
     const layer = await prisma.layer.create({ data });

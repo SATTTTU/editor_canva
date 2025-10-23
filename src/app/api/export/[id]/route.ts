@@ -4,10 +4,13 @@ import sharp from 'sharp';
 import prisma from '@/lib/prisma';
 import path from 'path';
 
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+export async function GET(request: Request, context: any) {
   try {
+    const params = await context?.params;
+    const { id } = params;
+
     const design = await prisma.design.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         layers: {
           where: { visible: true },
@@ -62,7 +65,10 @@ export async function GET(request: Request, { params }: { params: { id: string }
     .png()
     .toBuffer();
 
-    return new NextResponse(finalImageBuffer, {
+    // Buffer isn't assignable to the web `BodyInit` type in TypeScript even
+    // though it's acceptable at runtime (Node's Buffer extends Uint8Array).
+    // Cast to satisfy the typechecker.
+    return new NextResponse(finalImageBuffer as unknown as BodyInit, {
       status: 200,
       headers: {
         'Content-Type': 'image/png',

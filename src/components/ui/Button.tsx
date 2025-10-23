@@ -6,11 +6,13 @@ type ButtonProps = {
   children: React.ReactNode
   onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void
   type?: "button" | "submit" | "reset"
-  variant?: "primary" | "secondary" | "danger" | "outline" | "ghost"
-  size?: "sm" | "md" | "lg"
+  variant?: "primary" | "secondary" | "danger" | "destructive" | "outline" | "ghost"
+  size?: "sm" | "md" | "lg" | "icon"
   isLoading?: boolean
   disabled?: boolean
   className?: string
+  title?: string
+  ariaLabel?: string
 }
 
 export default function Button({
@@ -22,6 +24,8 @@ export default function Button({
   isLoading = false,
   disabled = false,
   className = "",
+  title,
+  ariaLabel,
 }: ButtonProps) {
   const base =
     "inline-flex items-center justify-center font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors duration-200"
@@ -33,6 +37,8 @@ export default function Button({
       "bg-gray-100 text-gray-800 hover:bg-gray-200 focus:ring-gray-400 disabled:bg-gray-300",
     danger:
       "bg-red-600 text-white hover:bg-red-700 focus:ring-red-500 disabled:bg-red-400",
+    destructive:
+      "bg-red-600 text-white hover:bg-red-700 focus:ring-red-500 disabled:bg-red-400",
     outline:
       "border border-gray-300 text-gray-700 hover:bg-gray-100 focus:ring-gray-300 disabled:opacity-50",
     ghost:
@@ -43,6 +49,7 @@ export default function Button({
     sm: "px-3 py-1 text-sm",
     md: "px-4 py-2 text-base",
     lg: "px-6 py-3 text-lg",
+    icon: "p-1 w-8 h-8"
   }
 
   return (
@@ -50,6 +57,8 @@ export default function Button({
       type={type}
       onClick={onClick}
       disabled={disabled || isLoading}
+      title={title}
+      aria-label={ariaLabel}
       className={`${base} ${variants[variant]} ${sizes[size]} ${
         disabled || isLoading ? "cursor-not-allowed opacity-70" : ""
       } ${className}`}
