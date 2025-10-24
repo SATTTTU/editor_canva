@@ -1,16 +1,18 @@
 "use client"
 
 import { useState } from "react"
-import { useDispatch } from "react-redux"
+import { useDispatch, useSelector } from "react-redux"
 import { Trash2, Download, Upload, X, Loader2 } from "lucide-react"
 import { AppDispatch } from "@/lib/store/store"
-import { loadDesign } from "@/lib/store/editorSlice" // <-- This import now works correctly
+import { loadDesign, clearDesign } from "@/lib/store/editorSlice"
+import { RootState } from "@/lib/store/store"
 import useDesigns from "@/hooks/useDesigns"
 import Button from "../ui/Button"
 
 export function DesignManager() {
   const dispatch = useDispatch<AppDispatch>()
   const { designs, loading, error, fetchDesigns } = useDesigns()
+  const currentDesignId = useSelector((state: RootState) => state.editor.designId)
   const [isOpen, setIsOpen] = useState(false)
 
   const handleLoadDesign = async (designId: string) => {
@@ -35,6 +37,10 @@ export function DesignManager() {
     try {
       await fetch(`/api/designs/${designId}`, { method: 'DELETE' });
       fetchDesigns(); // Refresh the list after deleting
+      // If the deleted design is currently loaded in the editor, clear it from local state
+      if (currentDesignId === designId) {
+        dispatch(clearDesign());
+      }
     } catch (err) {
       alert("Failed to delete design.");
     }

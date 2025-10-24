@@ -188,6 +188,16 @@ const editorSlice = createSlice({
         state.cropLayerId = null; // Exit crop mode
         state.selectedLayerId = action.payload.id; // Re-select the layer
     },
+    // Clear the currently loaded design from editor state (used after deleting a design)
+    clearDesign: (state) => {
+      state.designId = null;
+      state.baseImage = null;
+      state.layers = [];
+      state.selectedLayerId = null;
+      state.cropLayerId = null;
+      state.stageRef = null;
+      state.status = 'idle';
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -215,6 +225,7 @@ export const {
   reorderLayer,
   startCrop,
   applyCrop,
+  clearDesign,
 } = editorSlice.actions;
 
 export default editorSlice.reducer;
